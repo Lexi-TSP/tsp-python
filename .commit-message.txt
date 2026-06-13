@@ -1,0 +1,17 @@
+feat: tsp-verify 0.1.0 - Python port of the TSP v3.0 reference verifier core
+
+Canonicalization byte-identical to the JS reference (ECMAScript number
+serialization bridged via shortest-round-trip repr; object keys sorted by
+UTF-16 code units), trust envelope and manifest validation with the reference
+error vocabulary, Ed25519 local verification with the granular check profile.
+One declared runtime dependency (cryptography - stdlib has no Ed25519);
+everything else stdlib. Verification only: holds no keys, signs nothing.
+
+Package imports as `tsp_verify`, publishes to PyPI as `tsp-verify`. Repo named
+`tsp-python` per the tsp-* convention; the LexiTSP wordmark is intentionally
+dropped (ADR-0004). LexiCo AS retained in NOTICE as the copyright entity only.
+
+Conformance-gated: conformance/run_conformance.py runs the checksum-pinned
+tsp-spec fixture snapshot - integrity check first, then every vector including
+both ADR-0002 provenance profiles. A failure is a port bug, never a fixture
+problem (ADR-0008).
