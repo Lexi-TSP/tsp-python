@@ -17,17 +17,35 @@ print(result["valid"])                    # True / False — fail-closed
 print(result["checks"]["ledgerHash"])     # granular per-check verdicts
 ```
 
+It also verifies **commercial licenses** (TSP License Artifact v1, ADR-0010) —
+a sibling artifact validated fully offline through `license -> issuer -> pinned
+license-root`, reusing the same crypto substrate:
+
+```python
+from tsp_verify import verify_license
+
+result = verify_license(
+    bundle,                                   # a tsp.license-bundle.v1
+    {"origin": "https://customer.example",    # this deployment's manifest origin
+     "trustedRootKeys": [pinned_root],        # {"rootKeyId", "publicKey"} set
+     "requiredModules": ["gateway-pro"]},     # default-deny per module
+    now="2026-07-01T00:00:00.000Z",
+)
+print(result["ok"], result["reason"])         # e.g. True "valid", or False "license_expired"
+```
+
 ## Conformance is the correctness claim
 
 This port is correct because it reproduces the normative verdicts of the
 [tsp-spec](https://github.com/Lexi-TSP/tsp-spec) fixture suite — including
-the ADR-0002 tamper-rejection vectors and byte-identical canonical forms —
+the ADR-0002 tamper-rejection vectors, the ADR-0010 license vectors, and
+byte-identical canonical forms —
 not because anyone says so. Prove it on your machine:
 
 ```bash
 python conformance/run_conformance.py
 # integrity: 10 fixtures match pinned SHA256SUMS
-# ... all 7 conformance vectors pass against the Python port
+# ... all 23 conformance vectors pass against the Python port (v3.0 + license)
 ```
 
 A failure of that runner is a bug in this port, never grounds to adjust the

@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""TSP v3.0 conformance runner for the Python port.
+"""TSP conformance runner for the Python port.
 
-Runs the checksum-pinned tsp-spec fixture suite through this port and asserts
-the normative per-vector profiles from expectations.json. Exit 0 only if the
-snapshot is intact AND every vector matches. A failure here means THIS PORT
-is wrong (ADR-0008) -- fix the port, never the fixtures.
+Runs the checksum-pinned tsp-spec fixture suites through this port and asserts
+the normative per-vector profiles. Two SEPARATE suites (ADR-0010): the v3.0
+TrustEnvelope vectors and the tsp.license.v1 vectors, each with its own
+SHA256SUMS, never mixed. Exit 0 only if every snapshot is intact AND every
+vector matches. A failure here means THIS PORT is wrong (ADR-0008) -- fix the
+port, never the fixtures.
 """
 from __future__ import annotations
 
@@ -17,19 +19,23 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 
-from tsp_verify import canonicalize, sha256_hex, validate_trust_envelope_shape, verify_local  # noqa: E402
+from tsp_verify import (  # noqa: E402
+    canonicalize, sha256_hex, validate_trust_envelope_shape, verify_local, verify_license,
+)
 
 SNAPSHOT = HERE / "spec-snapshot"
 FIXTURES = SNAPSHOT / "fixtures" / "v3.0"
+LICENSE_FIXTURES = SNAPSHOT / "fixtures" / "license-v1"
 
 
 def read_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def verify_snapshot_integrity():
+def verify_sums(sums_path: Path):
+    """Verify a SHA256SUMS file; rel paths are resolved against SNAPSHOT."""
     mismatches = []
-    lines = [l.strip() for l in (FIXTURES / "SHA256SUMS").read_text(encoding="utf-8").splitlines() if l.strip()]
+    lines = [l.strip() for l in sums_path.read_text(encoding="utf-8").splitlines() if l.strip()]
     for line in lines:
         m = re.match(r"^([a-f0-9]{64})\s+(.+)$", line)
         if not m:
@@ -136,18 +142,35 @@ def run_vector(vec):
     return [f"unknown kind: {kind}"]
 
 
+def run_license_vector(vec, trusted_root_keys):
+    bundle = read_json(LICENSE_FIXTURES / vec["file"])
+    config = {
+        "origin": vec["origin"],
+        "trustedRootKeys": trusted_root_keys,
+        "requiredModules": vec.get("requiredModules", []),
+    }
+    result = verify_license(bundle, config, vec["now"])
+    fails = []
+    if result["ok"] != vec["expect"]["ok"]:
+        fails.append(f"ok: expected {vec['expect']['ok']}, got {result['ok']} ({result['reason']}: {result['detail']})")
+    if result["reason"] != vec["expect"]["reason"]:
+        fails.append(f"reason: expected {vec['expect']['reason']}, got {result['reason']}")
+    return fails
+
+
 def main():
+    failed = 0
+
+    # ----- v3.0 TrustEnvelope suite -----
     spec = read_json(SNAPSHOT / "expectations.json")
     print(f"TSP Python-port conformance -- wire tsp \"{spec['tsp']}\" - maturity \"{spec['specMaturity']}\"")
-    count, mismatches = verify_snapshot_integrity()
+    count, mismatches = verify_sums(FIXTURES / "SHA256SUMS")
     if mismatches:
-        print(f"snapshot integrity FAILED ({len(mismatches)}/{count}):")
+        print(f"v3.0 snapshot integrity FAILED ({len(mismatches)}/{count}):")
         for m in mismatches:
             print("   ", m)
         sys.exit(1)
-    print(f"integrity: {count} fixtures match pinned SHA256SUMS")
-
-    failed = 0
+    print(f"integrity: {count} v3.0 fixtures match pinned SHA256SUMS")
     for vec in spec["vectors"]:
         fails = run_vector(vec)
         if fails:
@@ -158,10 +181,33 @@ def main():
         else:
             print(f"PASS  {vec['file']}  [{vec['kind']}]")
 
+    # ----- TSP License Artifact v1 suite (ADR-0010; separate track) -----
+    lic = read_json(SNAPSHOT / "license-expectations.json")
+    print(f"\nlicense conformance -- artifact \"{lic['artifact']}\"")
+    lcount, lmismatches = verify_sums(LICENSE_FIXTURES / "SHA256SUMS")
+    if lmismatches:
+        print(f"license snapshot integrity FAILED ({len(lmismatches)}/{lcount}):")
+        for m in lmismatches:
+            print("   ", m)
+        sys.exit(1)
+    print(f"integrity: {lcount} license fixtures match pinned SHA256SUMS")
+    root_file = read_json(LICENSE_FIXTURES / lic["rootKey"])
+    trusted_root_keys = [{"rootKeyId": root_file["rootKeyId"], "publicKey": root_file["publicKey"]}]
+    for vec in lic["vectors"]:
+        fails = run_license_vector(vec, trusted_root_keys)
+        if fails:
+            failed += 1
+            print(f"FAIL  {vec['file']}  [{vec['expect']['reason']}]")
+            for f in fails:
+                print("       ", f)
+        else:
+            print(f"PASS  {vec['file']}  [{vec['expect']['reason']}]")
+
+    total = len(spec["vectors"]) + len(lic["vectors"])
     if failed == 0:
-        print(f"\nall {len(spec['vectors'])} conformance vectors pass against the Python port")
+        print(f"\nall {total} conformance vectors pass against the Python port")
         sys.exit(0)
-    print(f"\n{failed}/{len(spec['vectors'])} vectors diverge -- this port is wrong until fixed (ADR-0008)")
+    print(f"\n{failed}/{total} vectors diverge -- this port is wrong until fixed (ADR-0008)")
     sys.exit(1)
 
 
