@@ -13,6 +13,17 @@ evidence from Python: canonicalization (RFC 8785-style, byte-identical to the
 JS reference), trust envelope and trust manifest validation, and Ed25519
 local verification with the granular check profile.
 
+## Install
+
+```bash
+python -m pip install tsp-verify
+# For the current public alpha pin:
+python -m pip install tsp-verify==0.1.0
+```
+
+Requires Python >=3.10 and installs one runtime dependency,
+`cryptography>=42`, because Python's standard library has no Ed25519.
+
 ```python
 import json
 from tsp_verify import verify_local
@@ -75,5 +86,20 @@ implemented in the JS reference core and specified by tsp-spec's online
 vectors; a Python online port follows. Local-only caveat: `signature.keyRef`
 is carried but **not** authenticated — key binding is an online-mode
 property.
+
+## Releasing
+
+Publishing is automated through GitHub Actions and PyPI Trusted Publishing.
+To cut a release:
+
+1. Keep `pyproject.toml` and `tsp_verify/__init__.py` on the same version.
+2. Merge the release workflow changes to `main` after CI and conformance pass.
+3. Tag the `main` commit with `v0.1.0` and push the tag.
+
+The `Release (PyPI)` workflow runs unit tests, fixture conformance,
+`python -m build`, `twine check`, verifies that the tag matches
+`pyproject.toml`, and publishes to PyPI using the repository's trusted
+publisher identity. PyPI versions are immutable, so every future release
+needs a new version number.
 
 Trust is not earned. It is given — to what can be verified.
